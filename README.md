@@ -1,2 +1,2 @@
-# gweb
-Go Web框架
+# GWeb
+Go Web
