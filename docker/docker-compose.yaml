@@ -1,0 +1,133 @@
+# 指定 Docker Compose 文件的版本
+# 3.8 版本支持大多数现代功能
+version: '3.8'
+
+# 定义服务集
+services:
+  # MariaDB 数据库服务
+  db:
+    # 使用 MariaDB 10.11 版本的官方镜像
+    image: mariadb:10.11
+    # 为容器指定一个明确的名称。如果不指定，Docker Compose 会按照规则生成容器名称：{项目名}-{服务名}-{序号}
+    #container_name: app_db
+    # 设置重启策略：除非手动停止，否则自动重启
+    restart: unless-stopped
+    # 指定容器连接的网络
+    networks: [ network ]
+    # 设置环境变量
+    environment:
+      # MariaDB root 用户的密码
+      MYSQL_ROOT_PASSWORD: root
+      # 自动创建的数据库名称
+      MYSQL_DATABASE: web
+      # 自动创建的用户名
+      MYSQL_USER: web
+      # 自动创建用户的密码
+      MYSQL_PASSWORD: web
+    # 数据卷挂载
+    volumes:
+      # 配置文件目录挂载
+      - ./volume/db/conf:/etc/mysql
+      # 数据目录挂载
+      - ./volume/db/data:/var/lib/mysql
+      # 日志文件目录挂载
+      - ./volume/db/log:/var/log/mysql
+    # 健康检查配置
+    healthcheck:
+      # 检查命令：使用 mysqladmin ping 检查数据库是否可用
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      # 检查间隔：每 30 秒检查一次
+      interval: 30s
+      # 检查超时时间：10秒
+      timeout: 10s
+      # 重试次数：失败 3 次后标记为不健康
+      retries: 3
+
+  # Redis 缓存服务
+  redis:
+    # 使用 Redis 7.2 Alpine 版本的官方镜像（轻量级）
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    networks: [ network ]
+    volumes:
+      - ./volume/redis/conf:/usr/local/etc/redis
+      - ./volume/redis/data:/data
+    # 服务器启动命令
+    # --appendonly yes：用于启用 AOF（Append Only File）持久化
+    command: redis-server --appendonly yes
+    healthcheck:
+      # 检查命令：使用 redis-cli ping 检查 Redis 是否可用
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # MinIO 对象存储服务
+  minio:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    restart: unless-stopped
+    networks: [ network ]
+    environment:
+      # MinIO root 用户账号
+      - MINIO_ROOT_USER=minioadmin
+      # MinIO root 用户密码
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - ./volume/minio/conf:/root/.minio
+      - ./volume/minio/data:/data
+      - ./volume/minio/log:/var/log/minio
+    # 服务器启动命令
+    # server /data：指定数据存储路径为 /data
+    # --console-address ":9001"：指定控制台服务在 9001 端口运行
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    # 端口映射
+    ports:
+      # {主机端口}:{容器端口}
+      # # API 服务端口，用于 SDK 和客户端连接
+      - "9000:9000"
+      # # 控制台 Web 界面端口，用于浏览器访问管理
+      - "9001:9001"
+
+  # GWeb 应用服务
+  gweb:
+    # 构建
+    build:
+      # 构建上下文设置为上一级目录
+      context: ..
+      # Dockerfile 路径
+      dockerfile: docker/Dockerfile
+    # 构建的镜像名称和标签
+    image: gweb:${GWEB_IMAGE_TAG:-1.0.0}
+    restart: unless-stopped
+    networks: [ network ]
+    volumes:
+      - ./volume/gweb/conf.ini:/app/conf.ini
+      - ./volume/gweb/api.json:/app/api.json
+      - ./volume/gweb/debug.log:/app/debug.log
+    # 依赖关系：确保其他服务先启动
+    depends_on:
+      # 等待 db 健康检查通过
+      db:
+        condition: service_healthy
+      # 等待 redis 健康检查通过
+      redis:
+        condition: service_healthy
+      # 等待 minio 健康检查通过
+      minio:
+        condition: service_healthy
+    ports:
+      - "${GWEB_PORT:-58080}:58080"
+
+# 定义网络
+networks:
+  # 定义一个名为 network 的网络配置
+  network:
+    # 使用桥接网络驱动
+    driver: bridge
+    # 为网络指定一个明确的名称。如果不指定，Docker Compose 会按照规则生成网络名称：{项目名}_{网络名}
+    #name: myapp_network

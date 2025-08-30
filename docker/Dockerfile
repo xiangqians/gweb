@@ -7,7 +7,7 @@ FROM golang:1.24-alpine AS builder
 WORKDIR /app
 
 # 复制源码
-COPY ./ ./
+COPY tmp ./
 
 # 设置代理
 RUN go env -w GOPROXY=https://goproxy.cn,direct

@@ -1,12 +1,10 @@
-#!/bin/bash
-
 # 以 root 用户进入容器
 
 # 容器内部已安装 /bin/bash
-#docker exec -it -u root gweb /bin/bash
+#docker exec -it -u root myapp-gweb /bin/bash
 
-#docker exec -it -u root gweb sh
-docker exec -it -u root gweb env ENV=/root/.profile sh -c "echo \"alias ll='ls -alF'\" > /root/.profile && sh"
+#docker exec -it -u root myapp-gweb sh
+docker exec -it -u root myapp-gweb env ENV=/root/.profile sh -c "echo \"alias ll='ls -alF'\" > /root/.profile && sh"
 # ENV 变量指定了 sh 启动时要加载的配置文件
 # 设置 ll 命令
 # $ echo "alias ll='ls -alF'" >> /etc/profile && source /etc/profile
